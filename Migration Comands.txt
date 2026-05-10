@@ -1,0 +1,8 @@
+Add Table and add database
+add-migration AddCategoryModel
+update-database
+
+
+Seeds
+add-migration SeedCategoryTable
+update-database
