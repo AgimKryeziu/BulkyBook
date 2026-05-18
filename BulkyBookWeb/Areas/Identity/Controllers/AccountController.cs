@@ -67,6 +67,9 @@ namespace BulkyBookWeb.Areas.Identity.Controllers
             return View(model);
         }
 
+
+        
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Register(RegisterVM registerVM, string? returnUrl = null)

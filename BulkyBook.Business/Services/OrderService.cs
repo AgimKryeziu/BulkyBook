@@ -39,9 +39,16 @@ namespace BulkyBook.Business.Services
             {
                 query = query.Where(u => u.ApplicationUserId == userId);
             }
-            if (!string.IsNullOrEmpty(status))
+            if (!string.IsNullOrEmpty(status) && status.ToLower() != "all")
             {
-                query = query.Where(u => u.OrderStatus == status);
+                if (status.ToLower() == "cancelled")
+                {
+                    query = query.Where(u => u.OrderStatus == SD.StatusCancelled || u.OrderStatus == SD.StatusRefunded);
+                }
+                else
+                {
+                    query = query.Where(u => u.OrderStatus.ToLower() == status.ToLower());
+                }
             }
             return await query.ToListAsync();
         }
@@ -60,6 +67,37 @@ namespace BulkyBook.Business.Services
             }
 
             return await query.FirstOrDefaultAsync(u => u.Id == id);
+        }
+
+        public async Task UpdateOrderAsync(OrderHeader orderHeader)
+        {
+            _db.OrderHeaders.Update(orderHeader);
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task UpdateOrderStatusAsync(int id, string orderStatus, string? carrier = null, string? trackingNumber = null)
+        {
+            var order = await _db.OrderHeaders.FindAsync(id);
+            if (order == null)
+            {
+                throw new KeyNotFoundException($"Order {id} not found");
+            }
+            order.OrderStatus = orderStatus;
+
+            if (orderStatus == SD.StatusShipped)
+            {
+                order.ShippingDate = DateTime.UtcNow;
+                if (!string.IsNullOrEmpty(carrier))
+                {
+                    order.Carrier = carrier;
+                }
+                if (!string.IsNullOrEmpty(trackingNumber))
+                {
+                    order.TrackingNumber = trackingNumber;
+                }
+            }
+
+            await _db.SaveChangesAsync();
         }
 
     }
