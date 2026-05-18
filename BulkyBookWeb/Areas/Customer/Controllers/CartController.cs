@@ -1,6 +1,7 @@
 using BulkyBook.Business.Services.IServices;
 using BulkyBook.Models;
 using BulkyBook.Models.ViewModels;
+using BulkyBook.Utiltiy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
@@ -12,13 +13,13 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
     [Authorize]
     public class CartController : Controller
     {
-        private readonly IProductService _productService;
+        private readonly IOrderService _orderService;
         private readonly IShoppingCartService _shoppingCartService;
         private readonly IApplicationUserService _applicationUserService;
 
-        public CartController(IProductService productService, IShoppingCartService shoppingCartService, IApplicationUserService applicationUserService)
+        public CartController(IOrderService orderService, IShoppingCartService shoppingCartService, IApplicationUserService applicationUserService)
         {
-            this._productService = productService;
+            this._orderService = orderService;
             this._shoppingCartService = shoppingCartService;
             this._applicationUserService = applicationUserService;
         }
@@ -59,6 +60,49 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
 
             return View(shoppingCartVM);
         }
+
+        [HttpPost]
+        [ActionName("Index")]
+        public async Task<IActionResult> IndexPost(ShoppingCartVM shoppingCartVM)
+        {
+            var claimsIdentity = (ClaimsIdentity)User.Identity;
+            var userId = claimsIdentity?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var cartItems = await _shoppingCartService.GetUserCartItemsAsync(userId);
+
+            shoppingCartVM.ShoppingCartList = cartItems;
+            shoppingCartVM.OrderHeader.OrderDate = DateTime.Now;
+            shoppingCartVM.OrderHeader.ApplicationUserId = userId;
+
+            foreach (var cartItem in shoppingCartVM.ShoppingCartList)
+            {
+                shoppingCartVM.OrderHeader.OrderTotal += (cartItem.Product.Price * cartItem.Count);
+            }
+
+            shoppingCartVM.OrderHeader.OrderStatus = SD.StatusApproved;
+            shoppingCartVM.OrderHeader.OrderDetails = shoppingCartVM.ShoppingCartList.Select(card => new OrderDetails
+            {
+                ProductId = card.ProductId,
+                Count = card.Count,
+                Price = card.Price
+            }).ToList();
+
+            // create order
+            await _orderService.CreateOrderAsync(shoppingCartVM.OrderHeader);
+
+            return RedirectToAction("OrderConfirmation", new { id = shoppingCartVM.OrderHeader.Id });
+        }
+
+        public async Task<IActionResult> OrderConfirmation(int id)
+        {
+            return View(id);
+        }
+
 
         public async Task<IActionResult> Plus(int cartId)
         {
