@@ -23,7 +23,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Password.RequireNonAlphanumeric = true;             // Must have at least one special character (!@#$%^&*)
     options.Password.RequiredLength = 6;                        // Minimum 6 characters
     options.Password.RequiredUniqueChars = 1;                   // Minimum unique characters
-}).AddEntityFrameworkStores<ApplicationDbContext>();
+}).AddDefaultTokenProviders().AddEntityFrameworkStores<ApplicationDbContext>();
 
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IProductService, ProductService>();
