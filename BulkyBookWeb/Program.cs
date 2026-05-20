@@ -27,9 +27,19 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>();
-builder.Services.AddScoped<IApplicationUserService, ApplicationUserService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IShoppingCartService, ShoppingCartService>(); 
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IApplicationUserService, ApplicationUserService>();
+
+
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -51,6 +61,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseRouting();
+app.UseSession();
+
 
 app.UseAuthentication();
 app.UseAuthorization();

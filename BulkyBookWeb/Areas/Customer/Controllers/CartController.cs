@@ -14,14 +14,16 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
     public class CartController : Controller
     {
         private readonly IOrderService _orderService;
+        private readonly IEmailService _emailService;
         private readonly IShoppingCartService _shoppingCartService;
         private readonly IApplicationUserService _applicationUserService;
 
-        public CartController(IOrderService orderService, IShoppingCartService shoppingCartService, IApplicationUserService applicationUserService)
+        public CartController(IOrderService orderService, IShoppingCartService shoppingCartService, IApplicationUserService applicationUserService, IEmailService emailService)
         {
             this._orderService = orderService;
             this._shoppingCartService = shoppingCartService;
             this._applicationUserService = applicationUserService;
+            this._emailService = emailService;
         }
 
         public async Task<IActionResult> Index()
@@ -95,6 +97,10 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
             // create order
             await _orderService.CreateOrderAsync(shoppingCartVM.OrderHeader);
 
+            var user = await _applicationUserService.GetUserByIdAsync(userId);
+            await _emailService.SendOrderConfirmationEmailAsync(user.Email,
+                shoppingCartVM.OrderHeader.Id, (decimal)shoppingCartVM.OrderHeader.OrderTotal);
+
             return RedirectToAction("OrderConfirmation", new { id = shoppingCartVM.OrderHeader.Id });
         }
 
@@ -118,6 +124,7 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
                 {
                     cart.Count++;
                     await _shoppingCartService.UpdateCartAsync(cart);
+                    await UpdateCartSessionAsync();
                 }
             }
 
@@ -132,6 +139,7 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
             {
                 cart.Count--;
                 await _shoppingCartService.UpdateCartAsync(cart);
+                await UpdateCartSessionAsync();
             }
 
             return RedirectToAction(nameof(Index));
@@ -145,6 +153,7 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
             {
                 cart.Count = 0;
                 await _shoppingCartService.UpdateCartAsync(cart);
+                await UpdateCartSessionAsync();
             }
 
             return RedirectToAction(nameof(Index));
@@ -175,8 +184,21 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
 
             }
             await _shoppingCartService.UpdateCartAsync(cart);
+            await UpdateCartSessionAsync();
 
             return Ok(new { success = true });
+        }
+
+        private async Task UpdateCartSessionAsync()
+        {
+            var claimsIdentity = (ClaimsIdentity)User.Identity;
+            var userId = claimsIdentity?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                var count = await _shoppingCartService.GetCartCountAsync(userId);
+                HttpContext.Session.SetInt32(SD.SessionCart, count);
+            }
         }
     }
 }

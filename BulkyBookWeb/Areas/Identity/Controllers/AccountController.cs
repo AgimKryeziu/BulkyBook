@@ -1,6 +1,8 @@
-﻿using BulkyBook.Models;
+﻿using BulkyBook.Business.Services.IServices;
+using BulkyBook.Models;
 using BulkyBook.Models.ViewModels;
 using BulkyBook.Utiltiy;
+using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -13,13 +15,15 @@ namespace BulkyBookWeb.Areas.Identity.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
+        private readonly IShoppingCartService _shoppingCartService;
 
 
-        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, RoleManager<IdentityRole> roleManager)
+        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, RoleManager<IdentityRole> roleManager, IShoppingCartService shoppingCartService)
         {
             this._userManager = userManager;
-            _signInManager = signInManager;
-            _roleManager = roleManager;
+            this._signInManager = signInManager;
+            this._roleManager = roleManager;
+            this._shoppingCartService = shoppingCartService;
         }
 
         public IActionResult Login(string? returnUrl = null)
@@ -108,6 +112,7 @@ namespace BulkyBookWeb.Areas.Identity.Controllers
                         await _userManager.AddToRoleAsync(user, SD.RoleCustomer);
                     }
 
+
                     await _signInManager.SignInAsync(user, isPersistent: false);
                     if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                     {
@@ -134,6 +139,7 @@ namespace BulkyBookWeb.Areas.Identity.Controllers
         public async Task<IActionResult> Logout()
         {
             await _signInManager.SignOutAsync();
+            HttpContext.Session.SetInt32(SD.SessionCart, 0);
             return RedirectToAction("Index", "Home", new { area = "Customer" });
         }
     }
