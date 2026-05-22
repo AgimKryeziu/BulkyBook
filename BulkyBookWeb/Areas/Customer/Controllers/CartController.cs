@@ -2,8 +2,11 @@ using BulkyBook.Business.Services.IServices;
 using BulkyBook.Models;
 using BulkyBook.Models.ViewModels;
 using BulkyBook.Utiltiy;
+using Mailjet.Client.Resources;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stripe;
+using Stripe.Checkout;
 using System.Diagnostics;
 using System.Security.Claims;
 
@@ -86,7 +89,7 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
                 shoppingCartVM.OrderHeader.OrderTotal += (cartItem.Product.Price * cartItem.Count);
             }
 
-            shoppingCartVM.OrderHeader.OrderStatus = SD.StatusApproved;
+            shoppingCartVM.OrderHeader.OrderStatus = SD.StatusPending;
             shoppingCartVM.OrderHeader.OrderDetails = shoppingCartVM.ShoppingCartList.Select(card => new OrderDetails
             {
                 ProductId = card.ProductId,
@@ -97,15 +100,66 @@ namespace BulkyBookWeb.Areas.Customer.Controllers
             // create order
             await _orderService.CreateOrderAsync(shoppingCartVM.OrderHeader);
 
-            var user = await _applicationUserService.GetUserByIdAsync(userId);
-            await _emailService.SendOrderConfirmationEmailAsync(user.Email,
-                shoppingCartVM.OrderHeader.Id, (decimal)shoppingCartVM.OrderHeader.OrderTotal);
+            try
+            {
+                var domain = Request.Scheme + "://" + Request.Host.Value + "/";
 
-            return RedirectToAction("OrderConfirmation", new { id = shoppingCartVM.OrderHeader.Id });
+                var sessionUrl = await _orderService.CreateStripeCheckoutSessionAsync(shoppingCartVM.OrderHeader, shoppingCartVM.ShoppingCartList, domain);
+                Response.Headers.Append("Location", sessionUrl);
+                return new StatusCodeResult(303);
+            }
+            catch (StripeException ex)
+            {
+                TempData["error"] = "Payment processing failed. Please try again.";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         public async Task<IActionResult> OrderConfirmation(int id)
         {
+            var orderHeader = await _orderService.GetOrderByIdAsync(id, includeUser: true);
+            if (orderHeader == null)
+            {
+                return NotFound();
+            }
+
+            var claimsIdentity = (ClaimsIdentity)User.Identity;
+            var userId = claimsIdentity?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+            if (orderHeader.ApplicationUserId != userId)
+            {
+                return RedirectToAction("AccessDenied", "Account", new { area = "Identity" });
+            }
+
+            try
+            {
+
+                var result = await _orderService.VerifyStripePaymentAsync(orderHeader);
+
+                if (result)
+                {
+                    TempData["success"] = "Payment completed successfully! Your order has been confirmed.";
+                }
+                else
+                {
+                    TempData["success"] = "Payment status is pending. Please contact support if you completed the payment.";
+                }
+
+
+            }
+            catch (StripeException ex)
+            {
+                TempData["error"] = "Unable to verify payment status. Please contact support with your order number.";
+            }
+
+
+            var user = await _applicationUserService.GetUserByIdAsync(userId);
+            await _emailService.SendOrderConfirmationEmailAsync(user.Email,
+                orderHeader.Id, (decimal)orderHeader.OrderTotal);
+
             return View(id);
         }
 
